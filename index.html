@@ -3,679 +3,548 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GazeCursor · eye controlled mouse (assistive)</title>
-    <!-- TensorFlow and MediaPipe (FaceMesh) via CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.2.0/dist/tf-core.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.2.0/dist/tf-converter.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.2.0/dist/tf-backend-webgl.min.js"></script>
-    <!-- face-landmarks-detection (uses MediaPipe) -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection@1.0.0/dist/face-landmarks-detection.min.js"></script>
+    <title>GazeBrowser – eye controlled browsing</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
             font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
-            user-select: none;
         }
         body {
+            background: #0b1120;
             min-height: 100vh;
-            background: linear-gradient(145deg, #0b1729 0%, #1b2f44 100%);
             display: flex;
             justify-content: center;
             align-items: center;
             padding: 16px;
         }
-        .card {
+        .app-container {
             max-width: 1400px;
             width: 100%;
-            background: rgba(255,255,255,0.06);
-            backdrop-filter: blur(8px);
+            background: #1e293b;
             border-radius: 48px;
             padding: 24px;
-            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.8), inset 0 1px 2px rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.15);
+            box-shadow: 0 25px 50px -12px black;
+            border: 1px solid #334155;
         }
-        .main-panel {
+        .main-row {
             display: flex;
-            flex-wrap: wrap;
             gap: 20px;
+            flex-wrap: wrap;
         }
-        .video-section {
+        .video-panel {
             flex: 2;
-            min-width: 360px;
+            min-width: 400px;
             position: relative;
             border-radius: 32px;
             overflow: hidden;
-            background: #0a121c;
-            border: 2px solid rgba(255,255,255,0.2);
-            box-shadow: 0 20px 30px -10px black;
+            background: #0f172a;
+            border: 2px solid #38bdf8;
         }
         .video-container {
             position: relative;
             width: 100%;
             aspect-ratio: 4/3;
-            background: #11212e;
         }
         #webcam {
             position: absolute;
             width: 100%;
             height: 100%;
             object-fit: cover;
-            transform: scaleX(-1);  /* mirror for intuitive movement */
             display: block;
         }
-        #landmark-canvas {
+        #overlay {
             position: absolute;
             width: 100%;
             height: 100%;
             top: 0;
             left: 0;
             pointer-events: none;
-            transform: scaleX(-1); /* match mirrored webcam */
         }
-        .toggle-landmarks {
-            position: absolute;
-            bottom: 16px;
-            right: 16px;
-            background: rgba(0,20,40,0.7);
-            backdrop-filter: blur(4px);
-            border: 1px solid cyan;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 60px;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            cursor: pointer;
-            border: 1px solid #4cc9f0;
-            box-shadow: 0 0 15px #4cc9f066;
-            transition: 0.2s;
-            z-index: 10;
-        }
-        .toggle-landmarks:hover {
-            background: #1e4b6e;
-        }
-        .cursor-status {
+        .status-badge {
             position: absolute;
             top: 16px;
             left: 16px;
-            background: #0f212f;
-            padding: 10px 20px;
-            border-radius: 60px;
-            border-left: 6px solid #0ef;
+            background: #0f172ae0;
             color: white;
+            padding: 8px 20px;
+            border-radius: 40px;
             font-weight: 600;
-            box-shadow: 0 10px 20px -10px black;
-            z-index: 10;
             backdrop-filter: blur(4px);
+            border: 1px solid #38bdf8;
+            z-index: 10;
         }
-        .cursor-status span {
-            color: #0ef;
-            margin-left: 6px;
+        .mode-indicator {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: #0f172ae0;
+            color: #fbbf24;
+            padding: 8px 20px;
+            border-radius: 40px;
+            font-weight: 600;
+            backdrop-filter: blur(4px);
+            border: 1px solid #fbbf24;
+            z-index: 10;
         }
-        .info-section {
+        .control-panel {
             flex: 1;
             min-width: 280px;
-            background: rgba(10, 25, 40, 0.7);
-            backdrop-filter: blur(8px);
+            background: #1e293b;
             border-radius: 32px;
-            padding: 24px 20px;
-            border: 1px solid #3a5f7a;
-            color: #e3f2fd;
+            padding: 24px;
+            color: white;
+            border: 1px solid #475569;
             display: flex;
             flex-direction: column;
             gap: 24px;
         }
-        .calibration-box {
-            background: #0e2a38;
+        .section {
+            background: #0f172a;
             border-radius: 24px;
             padding: 20px;
-            border: 1px solid #2c5f8a;
         }
-        .calibration-box h3 {
-            font-weight: 400;
-            margin-bottom: 18px;
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            color: #b2e6ff;
-        }
-        .calibration-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
+        .section h3 {
             margin-bottom: 16px;
+            color: #94a3b8;
+            font-weight: 400;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
-        .calib-btn {
-            background: #1a4055;
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+        button {
+            background: #2d3b4f;
             border: none;
             color: white;
-            padding: 14px 0;
-            border-radius: 30px;
+            padding: 14px;
+            border-radius: 40px;
             font-weight: 600;
-            font-size: 1.1rem;
-            box-shadow: 0 6px 0 #0b1f2b;
-            transition: 0.08s linear;
+            font-size: 1rem;
             cursor: pointer;
-            border: 1px solid #3985b3;
+            border: 1px solid #60a5fa;
+            box-shadow: 0 4px 0 #0f172a;
+            transition: 0.08s;
         }
-        .calib-btn:active {
-            transform: translateY(5px);
-            box-shadow: 0 1px 0 #0b1f2b;
+        button:active {
+            transform: translateY(4px);
+            box-shadow: none;
         }
-        .calib-btn.active {
-            background: #3f9ed6;
-            box-shadow: 0 0 20px #00ccff;
-            border-color: white;
+        .slider-container {
+            margin: 16px 0;
         }
-        .offset-row {
+        .slider-container label {
             display: flex;
             justify-content: space-between;
-            background: #0f1e2b;
-            padding: 12px 18px;
-            border-radius: 40px;
+            color: #cbd5e1;
+        }
+        input[type=range] {
+            width: 100%;
+            margin-top: 8px;
+        }
+        .scroll-area {
+            background: #0f172a;
+            border-radius: 16px;
+            padding: 16px;
+            margin-top: 24px;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #475569;
+            color: #e2e8f0;
+        }
+        .scroll-area p {
+            margin: 16px 0;
+            padding: 12px;
+            background: #1e293b;
+            border-radius: 12px;
+        }
+        .footer-note {
+            text-align: center;
+            color: #94a3b8;
             font-size: 0.9rem;
-            border: 1px solid #20668b;
+            margin-top: 16px;
         }
-        .badge {
-            background: #0e2f40;
-            padding: 6px 16px;
-            border-radius: 40px;
-            color: #9fdbfc;
-        }
-        .virtual-cursor {
+        #virtualCursor {
             position: fixed;
-            width: 32px;
-            height: 32px;
-            background: rgba(255, 255, 255, 0.95);
+            width: 40px;
+            height: 40px;
+            background: white;
+            border: 3px solid #00ffff;
             border-radius: 50%;
-            box-shadow: 0 0 30px cyan, 0 8px 20px rgba(0,0,0,0.5);
-            border: 3px solid #00ccff;
+            box-shadow: 0 0 30px cyan;
             transform: translate(-50%, -50%);
             pointer-events: none;
-            z-index: 9999;
+            z-index: 10000;
             transition: width 0.1s, height 0.1s, background 0.1s;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 18px;
-            color: #0a1a2a;
+            font-size: 20px;
+            color: #0f172a;
             font-weight: bold;
-            backdrop-filter: blur(2px);
         }
-        .virtual-cursor.click-anim {
-            width: 48px;
-            height: 48px;
-            background: #f0f9ff;
-            border-color: #ffaa00;
-            box-shadow: 0 0 50px orange;
-        }
-        .virtual-cursor.disabled {
-            opacity: 0.3;
-            background: #555;
-            border-color: gray;
-            box-shadow: none;
-        }
-        .instructions {
-            background: #0b1f2c;
-            border-radius: 20px;
-            padding: 18px;
-            font-size: 0.95rem;
-            border-left: 6px solid #4cc9f0;
-        }
-        .instructions p {
-            margin: 8px 0;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .security-note {
-            background: #132a35;
-            border-radius: 30px;
-            padding: 12px 18px;
-            text-align: center;
-            border: 1px solid #2aa9c9;
-            font-weight: 500;
-        }
-        .footer-buttons {
-            display: flex;
-            gap: 14px;
-            flex-wrap: wrap;
-            margin-top: 10px;
-        }
-        .lg-btn {
-            background: #244b63;
-            border: none;
-            color: white;
-            padding: 16px 20px;
-            border-radius: 60px;
-            font-size: 1.2rem;
-            flex: 1 1 auto;
-            font-weight: 600;
-            box-shadow: 0 6px 0 #0b202b;
-            transition: 0.08s;
-            cursor: pointer;
-            border: 1px solid #5aa9d4;
-        }
-        .lg-btn:active {
-            transform: translateY(5px);
-            box-shadow: 0 1px 0 #0b202b;
+        .click-animation {
+            width: 56px !important;
+            height: 56px !important;
+            background: #fbbf24 !important;
+            border-color: #ff8800 !important;
         }
     </style>
 </head>
 <body>
-<div class="card">
-    <div class="main-panel">
-        <!-- VIDEO + OVERLAY -->
-        <div class="video-section">
+<div class="app-container">
+    <div class="main-row">
+        <!-- VIDEO PANEL -->
+        <div class="video-panel">
             <div class="video-container">
                 <video id="webcam" autoplay playsinline></video>
-                <canvas id="landmark-canvas"></canvas>
-                <div class="cursor-status">
-                    🖱️ cursor <span id="cursorState">enabled</span>
-                </div>
-                <button class="toggle-landmarks" id="toggleLandmarksBtn">👁️ hide landmarks</button>
+                <canvas id="overlay"></canvas>
+                <div class="status-badge" id="faceStatus">⏳ starting camera...</div>
+                <div class="mode-indicator" id="modeIndicator">⚫ cursor mode</div>
             </div>
         </div>
 
-        <!-- SIDE PANEL (calibration + UI) -->
-        <div class="info-section">
-            <div style="display: flex; gap: 10px; align-items: center;">
-                <span style="font-size: 32px;">🪞</span>
-                <span style="font-weight: 300;">eye‑tracking assist</span>
-            </div>
-            <!-- calibration card -->
-            <div class="calibration-box">
-                <h3>📐 1‑tap calibration (camera above you)</h3>
-                <div class="calibration-grid">
-                    <button class="calib-btn" id="calibCenter">⬤ center</button>
-                    <button class="calib-btn" id="calibLeft">← left</button>
-                    <button class="calib-btn" id="calibRight">→ right</button>
-                    <button class="calib-btn" id="calibUp">↑ up</button>
-                    <button class="calib-btn" id="calibDown">↓ down</button>
-                    <button class="calib-btn" id="resetCalib">⟲ reset</button>
+        <!-- CONTROL PANEL -->
+        <div class="control-panel">
+            <div class="section">
+                <h3>🎯 calibration</h3>
+                <div class="button-grid">
+                    <button id="calibCenter">⬤ center</button>
+                    <button id="calibLeft">← left</button>
+                    <button id="calibRight">→ right</button>
+                    <button id="calibUp">↑ up</button>
+                    <button id="calibDown">↓ down</button>
+                    <button id="resetCalib">⟲ reset</button>
                 </div>
-                <div class="offset-row">
-                    <span>🔵 offsets</span>
-                    <span class="badge" id="offsetDisplay">x:0 y:0</span>
+                <div style="margin-top: 16px; background:#1e293b; padding:12px; border-radius:30px; text-align:center;">
+                    offsets: <span id="offsetDisplay">x:0.000 y:0.000</span>
                 </div>
-                <div style="margin-top: 12px; font-size: 0.85rem; opacity: 0.8;">press button while looking in that direction (steady gaze)</div>
             </div>
 
-            <!-- cursor enable/disable + blink info -->
-            <div class="footer-buttons">
-                <button class="lg-btn" id="toggleCursorBtn">🖱️ toggle cursor</button>
-                <button class="lg-btn" id="resetOffsetsBtn">🎯 reset offsets</button>
+            <div class="section">
+                <h3>⚙️ settings</h3>
+                <div class="slider-container">
+                    <label>cursor speed <span id="speedValue">1.8x</span></label>
+                    <input type="range" id="speedSlider" min="0.5" max="3.0" step="0.1" value="1.8">
+                </div>
+                <div class="button-grid">
+                    <button id="toggleCursor">🖱️ enable/disable</button>
+                    <button id="toggleLandmarks">👁️ hide overlay</button>
+                </div>
             </div>
 
-            <!-- blink feedback -->
-            <div style="display: flex; gap: 20px; justify-content: space-around; background: #0f2838; border-radius: 60px; padding: 14px;">
-                <span>😉 blink → click</span>
-                <span>😜😜 double blink → toggle</span>
+            <div class="section">
+                <h3>📜 demo content (clickable & scrollable)</h3>
+                <div class="scroll-area" id="scrollableDemo">
+                    <p>🔵 <a href="#" onclick="alert('Link clicked!'); return false;">Click this link</a> — blink to click.</p>
+                    <p>🟢 Paragraph 2 – try clicking anywhere.</p>
+                    <p>🟡 Paragraph 3 – scroll down to see more.</p>
+                    <p>🔴 Paragraph 4 – use scroll mode to move this panel.</p>
+                    <p>🟣 Paragraph 5 – double blink toggles scroll mode.</p>
+                    <p>⚪ Paragraph 6 – then look up/down to scroll.</p>
+                    <p>🟤 Paragraph 7 – the virtual cursor clicks elements.</p>
+                    <p>🔵 Paragraph 8 – everything happens on this page.</p>
+                </div>
             </div>
 
-            <!-- instructions & privacy -->
-            <div class="instructions">
-                <p>💡 <strong>lighting & posture</strong></p>
-                <p>☀️ face well lit, no strong backlight</p>
-                <p>🪑 sit centered, camera slightly above eyes</p>
-                <p>👁️ keep a neutral expression</p>
-            </div>
-            <div class="security-note">
-                🔒 camera data never leaves your device — 100% frontend
+            <div class="footer-note">
+                🔒 camera data never leaves your device. <br>
+                💡 single blink = click · double blink = toggle scroll mode
             </div>
         </div>
     </div>
 </div>
 
-<!-- VIRTUAL CURSOR (div) -->
-<div id="virtualCursor" class="virtual-cursor">⚡</div>
+<div id="virtualCursor">⚡</div>
 
 <script>
 (function() {
-    // ---------- DOM elements ----------
+    // ----- DOM elements -----
     const video = document.getElementById('webcam');
-    const canvas = document.getElementById('landmark-canvas');
+    const canvas = document.getElementById('overlay');
     const ctx = canvas.getContext('2d');
     const cursorDiv = document.getElementById('virtualCursor');
-    const cursorStateSpan = document.getElementById('cursorState');
-    const toggleCursorBtn = document.getElementById('toggleCursorBtn');
-    const toggleLandmarksBtn = document.getElementById('toggleLandmarksBtn');
+    const faceStatus = document.getElementById('faceStatus');
+    const modeIndicator = document.getElementById('modeIndicator');
+    const offsetDisplay = document.getElementById('offsetDisplay');
+    const speedSlider = document.getElementById('speedSlider');
+    const speedValue = document.getElementById('speedValue');
+
+    // Buttons
     const calibCenter = document.getElementById('calibCenter');
     const calibLeft = document.getElementById('calibLeft');
     const calibRight = document.getElementById('calibRight');
     const calibUp = document.getElementById('calibUp');
     const calibDown = document.getElementById('calibDown');
     const resetCalib = document.getElementById('resetCalib');
-    const resetOffsetsBtn = document.getElementById('resetOffsetsBtn');
-    const offsetDisplay = document.getElementById('offsetDisplay');
+    const toggleCursor = document.getElementById('toggleCursor');
+    const toggleLandmarks = document.getElementById('toggleLandmarks');
 
-    // ---------- global state ----------
-    let faceDetector = null;
-    let lastVideoTime = -1;
+    // ----- state -----
+    let faceMesh = null;
     let landmarks = null;
-
-    // cursor enable
     let cursorEnabled = true;
+    let drawOverlay = true;
+    let scrollMode = false; // false = cursor mode, true = scroll mode
 
-    // landmark overlay flag
-    let drawLandmarks = true;  // default on
+    // calibration offsets (added to raw gaze)
+    let offsetX = 0.0, offsetY = 0.0;
 
-    // gaze smoothing (moving average)
-    const SMOOTH_FRAMES = 6;
-    const gazeHistory = { x: [], y: [] };
-    let smoothGazeX = 0.5;  // normalized 0..1
-    let smoothGazeY = 0.5;
+    // vertical compensation (camera above eyes)
+    const VERTICAL_COMP = 0.15;
 
-    // calibration offsets (neutral gaze mapped to 0.5, 0.5)
-    // offsets are applied as shift: gaze = rawGaze + offset (clamped)
-    let offsetX = 0.0;   // range ~ -0.3 .. 0.3
-    let offsetY = 0.0;   // we will add vertical compensation (camera above)
+    // speed multiplier
+    let speed = 1.8; // matches slider default
 
-    // FIXED VERTICAL BIAS: camera is above user => eyes look slightly upward to camera.
-    // we want neutral (straight ahead) to map to 0.5. So we ADD a positive offset (downward shift).
-    const VERTICAL_CAMERA_ABOVE_COMPENSATION = 0.12;  // tuned for typical laptop
+    // smoothing
+    const historyX = [], historyY = [];
+    const SMOOTH_FRAMES = 5;
 
     // blink detection
-    const EAR_THRESHOLD = 0.22;      // eye aspect ratio threshold
-    const BLINK_FRAMES = 3;           // consecutive frames to confirm blink
-    let leftEyeRatio = 1.0;
-    let rightEyeRatio = 1.0;
+    const EAR_THRESHOLD = 0.23;
+    const BLINK_FRAMES = 2;
     let blinkCounter = 0;
-    let blinkCooldown = 0;            // frames after click to avoid double
-    let doubleBlinkWindow = [];        // timestamps of recent blinks (ms)
-    const DOUBLE_BLINK_MS = 400;       // max interval for double blink
+    let blinkCooldown = 0;
+    let doubleBlinkWindow = [];
+    const DOUBLE_BLINK_MS = 400;
 
-    // indices from MediaPipe facemesh (iris + eye contour)
-    // left eye contour: 33,133,157,158,159,160,161,173  (simplified: we use 33,133 for aspect)
-    // right eye contour: 362,263,387,386,385,384,398,466
-    // we'll use landmarks 33 (left eye left corner) , 133 (right corner) , 159 (top) , 145 (bottom) for left EAR
-    // for right: 362,263,386,374? we use consistent: 362 (right corner), 263 (left corner), 386 (top), 374 (bottom)
-    const LEFT_EYE_INDICES = [33, 133, 159, 145];   // left, right, top, bottom
-    const RIGHT_EYE_INDICES = [362, 263, 386, 374]; // left, right, top, bottom (for right eye mirrored)
+    // eye landmark indices
+    const LEFT_IRIS = 468;
+    const RIGHT_IRIS = 473;
+    const LEFT_EYE = [33, 133, 159, 145];
+    const RIGHT_EYE = [362, 263, 386, 374];
 
-    // for gaze we use iris (left iris center: 468, right iris: 473) and also average
-    const IRIS_LEFT = 468;
-    const IRIS_RIGHT = 473;
-    // additional head pose? we'll use normalized iris positions
+    // ----- helpers -----
+    function log(msg) { console.log(msg); } // keep console clean
 
-    // ---------- helper: eye aspect ratio ----------
-    function eyeAspectRatio(landmarks, eyeIdx) {
+    function eyeAspectRatio(landmarks, idxs) {
         try {
-            // eyeIdx should be array of 4: [leftCorner, rightCorner, top, bottom]
-            const left = landmarks[eyeIdx[0]];
-            const right = landmarks[eyeIdx[1]];
-            const top = landmarks[eyeIdx[2]];
-            const bottom = landmarks[eyeIdx[3]];
-            if (!left || !right || !top || !bottom) return 1.0;
-            // width = distance between corners
-            const width = Math.hypot(right.x - left.x, right.y - left.y);
-            // height = distance between top and bottom
-            const height = Math.hypot(bottom.x - top.x, bottom.y - top.y);
-            if (width === 0) return 1.0;
-            return height / width;
-        } catch (e) {
-            return 1.0;
-        }
-    }
-
-    // ---------- init camera & face detector ----------
-    async function init() {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            video.srcObject = stream;
-            await video.play();
-            // set canvas dimensions
-            video.addEventListener('loadeddata', () => {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-            });
-
-            // load face detector (MediaPipe)
-            const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
-            const detectorConfig = {
-                runtime: 'mediapipe',
-                solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh',
-                maxFaces: 1,
-                refineLandmarks: true,   // get iris
-            };
-            faceDetector = await faceLandmarksDetection.createDetector(model, detectorConfig);
-            requestAnimationFrame(detectAndTrack);
-        } catch (err) {
-            alert('Camera access needed for eye tracking.');
-            console.error(err);
-        }
-    }
-
-    // ---------- map gaze to cursor position with offsets + compensation ----------
-    function updateCursorFromGaze() {
-        if (!cursorEnabled) {
-            cursorDiv.classList.add('disabled');
-            return;
-        } else {
-            cursorDiv.classList.remove('disabled');
-        }
-
-        if (!landmarks) return;
-
-        try {
-            // get iris centers (normalized 0..1) - use both eyes for robustness
-            const leftIris = landmarks[IRIS_LEFT];
-            const rightIris = landmarks[IRIS_RIGHT];
-            if (!leftIris || !rightIris) return;
-
-            // average x and y (already normalized 0-1)
-            let rawX = (leftIris.x + rightIris.x) / 2;
-            let rawY = (leftIris.y + rightIris.y) / 2;
-
-            // apply vertical compensation: camera above => add positive offset (down)
-            // and horizontal offset from calibration
-            let compensatedX = rawX + offsetX;
-            let compensatedY = rawY + offsetY + VERTICAL_CAMERA_ABOVE_COMPENSATION;
-
-            // clamp to 0..1
-            compensatedX = Math.min(1, Math.max(0, compensatedX));
-            compensatedY = Math.min(1, Math.max(0, compensatedY));
-
-            // smoothing (moving average)
-            gazeHistory.x.push(compensatedX);
-            gazeHistory.y.push(compensatedY);
-            if (gazeHistory.x.length > SMOOTH_FRAMES) gazeHistory.x.shift();
-            if (gazeHistory.y.length > SMOOTH_FRAMES) gazeHistory.y.shift();
-
-            const avgX = gazeHistory.x.reduce((a, b) => a + b, 0) / gazeHistory.x.length;
-            const avgY = gazeHistory.y.reduce((a, b) => a + b, 0) / gazeHistory.y.length;
-
-            smoothGazeX = avgX;
-            smoothGazeY = avgY;
-
-            // map to viewport
-            const cursorX = smoothGazeX * window.innerWidth;
-            const cursorY = smoothGazeY * window.innerHeight;
-
-            cursorDiv.style.left = cursorX + 'px';
-            cursorDiv.style.top = cursorY + 'px';
-        } catch (e) { /* ignore */ }
-    }
-
-    // ---------- blink processing ----------
-    function processBlink() {
-        if (!landmarks) return false;
-        const leftEAR = eyeAspectRatio(landmarks, LEFT_EYE_INDICES);
-        const rightEAR = eyeAspectRatio(landmarks, RIGHT_EYE_INDICES);
-        leftEyeRatio = leftEAR;
-        rightEyeRatio = rightEAR;
-        const ear = (leftEAR + rightEAR) / 2;
-
-        const blinked = ear < EAR_THRESHOLD;
-
-        // cooldown (prevents rapid fire)
-        if (blinkCooldown > 0) {
-            blinkCooldown--;
-            return false;
-        }
-
-        if (blinked) {
-            blinkCounter++;
-            if (blinkCounter >= BLINK_FRAMES) {
-                // blink confirmed
-                blinkCounter = 0;
-                blinkCooldown = 10;  // frames
-
-                const now = performance.now();
-                doubleBlinkWindow.push(now);
-                // keep only last 600ms
-                doubleBlinkWindow = doubleBlinkWindow.filter(t => now - t < DOUBLE_BLINK_MS);
-
-                if (doubleBlinkWindow.length >= 2) {
-                    // double blink: toggle cursor
-                    cursorEnabled = !cursorEnabled;
-                    cursorStateSpan.innerText = cursorEnabled ? 'enabled' : 'disabled';
-                    doubleBlinkWindow = []; // reset
-                    // visual feedback
-                    cursorDiv.classList.add('click-anim');
-                    setTimeout(() => cursorDiv.classList.remove('click-anim'), 200);
-                } else {
-                    // single blink => click animation
-                    cursorDiv.classList.add('click-anim');
-                    setTimeout(() => cursorDiv.classList.remove('click-anim'), 200);
-                }
-                return true;
-            }
-        } else {
-            blinkCounter = 0;
-        }
-        return false;
-    }
-
-    // ---------- draw landmarks on canvas ----------
-    function drawFaceMesh(landmarks) {
-        if (!drawLandmarks || !landmarks) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            return;
-        }
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#00ffff';
-        ctx.strokeStyle = '#ff66cc';
-        ctx.lineWidth = 2;
-
-        // draw iris points (468 left, 473 right) and some contour
-        [IRIS_LEFT, IRIS_RIGHT].forEach(idx => {
-            const pt = landmarks[idx];
-            if (pt) {
-                ctx.beginPath();
-                ctx.arc(pt.x * canvas.width, pt.y * canvas.height, 4, 0, 2 * Math.PI);
-                ctx.fillStyle = '#ffea00';
-                ctx.fill();
-                ctx.shadowBlur = 15; ctx.shadowColor = 'cyan';
-            }
-        });
-
-        // draw eye contours (simplified)
-        const eyeDrawIndices = [33,133,159,145, 362,263,386,374];
-        eyeDrawIndices.forEach(idx => {
-            const pt = landmarks[idx];
-            if (pt) {
-                ctx.beginPath();
-                ctx.arc(pt.x * canvas.width, pt.y * canvas.height, 3, 0, 2*Math.PI);
-                ctx.fillStyle = '#ff99cc';
-                ctx.fill();
-            }
-        });
-        ctx.shadowBlur = 0;
-    }
-
-    // ---------- core detection loop ----------
-    async function detectAndTrack() {
-        if (faceDetector && video.readyState === 4) {
-            try {
-                const estimationConfig = { flipHorizontal: false }; // we already mirror via canvas/video style
-                const faces = await faceDetector.estimateFaces(video, estimationConfig);
-
-                if (faces.length > 0) {
-                    landmarks = faces[0].keypoints.map(kp => ({ x: kp.x / video.videoWidth, y: kp.y / video.videoHeight }));
-                    // update cursor and blink
-                    updateCursorFromGaze();
-                    processBlink();
-                    drawFaceMesh(landmarks);
-                } else {
-                    landmarks = null;
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                }
-            } catch (e) {
-                console.warn(e);
-            }
-        }
-        requestAnimationFrame(detectAndTrack);
-    }
-
-    // ---------- calibration setters (offsets) ----------
-    function setCalibrationOffset(targetX, targetY) {
-        if (!landmarks) {
-            alert('No face detected – cannot calibrate.');
-            return;
-        }
-        try {
-            const leftIris = landmarks[IRIS_LEFT];
-            const rightIris = landmarks[IRIS_RIGHT];
-            if (!leftIris || !rightIris) return;
-            let rawX = (leftIris.x + rightIris.x) / 2;
-            let rawY = (leftIris.y + rightIris.y) / 2;
-
-            // desired gaze position (0..1): for center we want 0.5,0.5; left: x~0.2, right: x~0.8, up: y~0.2, down: y~0.8 (but with compensation)
-            // we compute offset = desired - raw (compensation is separate)
-            let desiredX = 0.5, desiredY = 0.5;
-            if (targetX !== undefined) desiredX = targetX;
-            if (targetY !== undefined) desiredY = targetY;
-
-            // new offset = desired - raw  (but we want offsets to be added later: gaze = raw + offset + compensation)
-            // So offset = desired - raw.
-            let newOffsetX = desiredX - rawX;
-            let newOffsetY = desiredY - rawY;
-
-            offsetX = newOffsetX;
-            offsetY = newOffsetY;
-
-            updateOffsetDisplay();
-        } catch (e) {}
-    }
-
-    function resetOffsets() {
-        offsetX = 0.0;
-        offsetY = 0.0;
-        updateOffsetDisplay();
+            const p1 = landmarks[idxs[0]], p2 = landmarks[idxs[1]], p3 = landmarks[idxs[2]], p4 = landmarks[idxs[3]];
+            const width = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+            const height = Math.hypot(p4.x - p3.x, p4.y - p3.y);
+            return width > 0 ? height / width : 1.0;
+        } catch { return 1.0; }
     }
 
     function updateOffsetDisplay() {
         offsetDisplay.innerText = `x:${offsetX.toFixed(3)} y:${offsetY.toFixed(3)}`;
     }
 
-    // ---------- UI event listeners ----------
-    toggleCursorBtn.addEventListener('click', () => {
-        cursorEnabled = !cursorEnabled;
-        cursorStateSpan.innerText = cursorEnabled ? 'enabled' : 'disabled';
-    });
+    // ----- face detection setup -----
+    async function init() {
+        try {
+            faceStatus.innerText = '📷 requesting camera...';
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } });
+            video.srcObject = stream;
+            await video.play();
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
 
-    toggleLandmarksBtn.addEventListener('click', () => {
-        drawLandmarks = !drawLandmarks;
-        toggleLandmarksBtn.innerText = drawLandmarks ? '👁️ hide landmarks' : '👁️ show landmarks';
-        if (!drawLandmarks) ctx.clearRect(0, 0, canvas.width, canvas.height);
-    });
+            faceMesh = new FaceMesh({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}` });
+            faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+            faceMesh.onResults(onFaceResults);
 
-    calibCenter.addEventListener('click', () => setCalibrationOffset(0.5, 0.5));
-    calibLeft.addEventListener('click', () => setCalibrationOffset(0.2, 0.5));
-    calibRight.addEventListener('click', () => setCalibrationOffset(0.8, 0.5));
-    calibUp.addEventListener('click', () => setCalibrationOffset(0.5, 0.2));
-    calibDown.addEventListener('click', () => setCalibrationOffset(0.5, 0.8));
+            faceStatus.innerText = '👀 looking for face...';
+            detectLoop();
+        } catch (err) {
+            faceStatus.innerText = '❌ camera error';
+            alert('Camera access failed: ' + err.message);
+        }
+    }
+
+    async function detectLoop() {
+        if (faceMesh && video.readyState >= 2) {
+            await faceMesh.send({ image: video });
+        }
+        requestAnimationFrame(detectLoop);
+    }
+
+    function onFaceResults(results) {
+        if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
+            faceStatus.innerText = '😴 no face';
+            landmarks = null;
+            if (!drawOverlay) ctx.clearRect(0,0,canvas.width,canvas.height);
+            return;
+        }
+        faceStatus.innerText = '✅ face detected';
+        const lm = results.multiFaceLandmarks[0];
+        landmarks = [];
+        for (let i=0; i<lm.length; i++) landmarks.push({ x: lm[i].x, y: lm[i].y, z: lm[i].z });
+
+        if (drawOverlay) drawLandmarks(landmarks);
+        else ctx.clearRect(0,0,canvas.width,canvas.height);
+
+        processGazeAndBlink(landmarks);
+    }
+
+    function drawLandmarks(lm) {
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        ctx.strokeStyle = '#00ffff';
+        ctx.lineWidth = 2;
+        // eye contours
+        ctx.beginPath();
+        for (let i=33; i<=133; i+=10) if(lm[i]) ctx.lineTo(lm[i].x*canvas.width, lm[i].y*canvas.height);
+        ctx.stroke();
+        ctx.beginPath();
+        for (let i=362; i<=463; i+=10) if(lm[i]) ctx.lineTo(lm[i].x*canvas.width, lm[i].y*canvas.height);
+        ctx.stroke();
+        // irises
+        ctx.fillStyle = '#ffaa00';
+        if(lm[LEFT_IRIS]) ctx.arc(lm[LEFT_IRIS].x*canvas.width, lm[LEFT_IRIS].y*canvas.height, 5,0,2*Math.PI) && ctx.fill();
+        if(lm[RIGHT_IRIS]) ctx.beginPath() && ctx.arc(lm[RIGHT_IRIS].x*canvas.width, lm[RIGHT_IRIS].y*canvas.height, 5,0,2*Math.PI) && ctx.fill();
+    }
+
+    function processGazeAndBlink(lm) {
+        if (!cursorEnabled) {
+            cursorDiv.style.opacity = '0.3';
+            return;
+        } else cursorDiv.style.opacity = '1';
+
+        const leftIris = lm[LEFT_IRIS], rightIris = lm[RIGHT_IRIS];
+        if (!leftIris || !rightIris) return;
+
+        // raw gaze (0-1)
+        let rawX = (leftIris.x + rightIris.x) / 2;
+        let rawY = (leftIris.y + rightIris.y) / 2;
+
+        // apply calibration and vertical compensation
+        let gazeX = rawX + offsetX;
+        let gazeY = rawY + offsetY + VERTICAL_COMP;
+        gazeX = Math.min(1, Math.max(0, gazeX));
+        gazeY = Math.min(1, Math.max(0, gazeY));
+
+        // apply speed: map from center (0.5) with multiplier
+        // first shift to -0.5..0.5 range, multiply, then shift back
+        let centeredX = (gazeX - 0.5) * speed;
+        let centeredY = (gazeY - 0.5) * speed;
+        // clamp again after speed
+        gazeX = Math.min(1, Math.max(0, 0.5 + centeredX));
+        gazeY = Math.min(1, Math.max(0, 0.5 + centeredY));
+
+        // smoothing
+        historyX.push(gazeX);
+        historyY.push(gazeY);
+        if (historyX.length > SMOOTH_FRAMES) historyX.shift();
+        if (historyY.length > SMOOTH_FRAMES) historyY.shift();
+        const smoothX = historyX.reduce((a,b)=>a+b,0)/historyX.length;
+        const smoothY = historyY.reduce((a,b)=>a+b,0)/historyY.length;
+
+        if (scrollMode) {
+            // scroll mode: vertical movement scrolls the demo area
+            const demoDiv = document.getElementById('scrollableDemo');
+            const scrollDelta = (smoothY - 0.5) * 10; // intensity
+            demoDiv.scrollTop += scrollDelta;
+            modeIndicator.innerText = '🔽 scroll mode';
+        } else {
+            // cursor mode: move virtual cursor
+            const screenX = smoothX * window.innerWidth;
+            const screenY = smoothY * window.innerHeight;
+            cursorDiv.style.left = screenX + 'px';
+            cursorDiv.style.top = screenY + 'px';
+            modeIndicator.innerText = '⚫ cursor mode';
+        }
+
+        // blink detection
+        const leftEAR = eyeAspectRatio(lm, LEFT_EYE);
+        const rightEAR = eyeAspectRatio(lm, RIGHT_EYE);
+        const ear = (leftEAR + rightEAR) / 2;
+
+        if (blinkCooldown > 0) {
+            blinkCooldown--;
+            return;
+        }
+
+        if (ear < EAR_THRESHOLD) {
+            blinkCounter++;
+            if (blinkCounter >= BLINK_FRAMES) {
+                blinkCounter = 0;
+                blinkCooldown = 8;
+
+                const now = Date.now();
+                doubleBlinkWindow.push(now);
+                doubleBlinkWindow = doubleBlinkWindow.filter(t => now - t < DOUBLE_BLINK_MS);
+
+                if (doubleBlinkWindow.length >= 2) {
+                    // double blink: toggle scroll mode
+                    scrollMode = !scrollMode;
+                    doubleBlinkWindow = [];
+                    cursorDiv.classList.add('click-animation');
+                    setTimeout(() => cursorDiv.classList.remove('click-animation'), 200);
+                } else {
+                    // single blink: perform click (only if in cursor mode)
+                    if (!scrollMode && cursorEnabled) {
+                        // get element under cursor and click it
+                        const cursorRect = cursorDiv.getBoundingClientRect();
+                        const elem = document.elementFromPoint(cursorRect.left + cursorRect.width/2, cursorRect.top + cursorRect.height/2);
+                        if (elem) {
+                            elem.click();
+                            // also trigger a focus for input fields? not needed for demo
+                        }
+                        cursorDiv.classList.add('click-animation');
+                        setTimeout(() => cursorDiv.classList.remove('click-animation'), 200);
+                    }
+                }
+            }
+        } else {
+            blinkCounter = 0;
+        }
+    }
+
+    // ----- calibration -----
+    function setOffset(targetX, targetY) {
+        if (!landmarks) { alert('No face detected'); return; }
+        const leftIris = landmarks[LEFT_IRIS], rightIris = landmarks[RIGHT_IRIS];
+        if (!leftIris || !rightIris) { alert('Iris not visible'); return; }
+        let rawX = (leftIris.x + rightIris.x) / 2;
+        let rawY = (leftIris.y + rightIris.y) / 2;
+        // we want: raw + offset + VERT_COMP = target
+        // so offset = target - raw - VERT_COMP
+        offsetX = targetX - rawX;
+        offsetY = targetY - rawY - VERTICAL_COMP;
+        updateOffsetDisplay();
+    }
+
+    function resetOffsets() {
+        offsetX = 0; offsetY = 0;
+        updateOffsetDisplay();
+    }
+
+    // ----- event listeners -----
+    calibCenter.addEventListener('click', () => setOffset(0.5, 0.5));
+    calibLeft.addEventListener('click', () => setOffset(0.2, 0.5));
+    calibRight.addEventListener('click', () => setOffset(0.8, 0.5));
+    calibUp.addEventListener('click', () => setOffset(0.5, 0.2));
+    calibDown.addEventListener('click', () => setOffset(0.5, 0.8));
     resetCalib.addEventListener('click', resetOffsets);
-    resetOffsetsBtn.addEventListener('click', resetOffsets);
 
-    // highlight active button? (optional)
-    // start
+    toggleCursor.addEventListener('click', () => {
+        cursorEnabled = !cursorEnabled;
+        toggleCursor.innerText = cursorEnabled ? '🖱️ disable cursor' : '🖱️ enable cursor';
+    });
+
+    toggleLandmarks.addEventListener('click', () => {
+        drawOverlay = !drawOverlay;
+        toggleLandmarks.innerText = drawOverlay ? '👁️ hide overlay' : '👁️ show overlay';
+        if (!drawOverlay) ctx.clearRect(0,0,canvas.width,canvas.height);
+    });
+
+    speedSlider.addEventListener('input', (e) => {
+        speed = parseFloat(e.target.value);
+        speedValue.innerText = speed.toFixed(1) + 'x';
+    });
+
+    // initialize
     init();
-    // initial offset display
     updateOffsetDisplay();
+
+    // extra: allow clicking on the demo area by actually simulating click above
+    // the virtual cursor click already does that
 })();
 </script>
 </body>
